@@ -1,11 +1,16 @@
 package com.cakes.democamera2;
 
-import androidx.annotation.NonNull;
-import androidx.appcompat.app.AppCompatActivity;
-
+import android.Manifest;
+import android.content.pm.PackageManager;
 import android.graphics.SurfaceTexture;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.TextureView;
+import android.view.View;
+
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
 
 import com.cakes.democamera2.utils.LogUtil;
 
@@ -25,15 +30,25 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        LogUtil.d(TAG, "onCreate -- 111111");
         textureView = findViewById(R.id.main_texture_view);
 
         textureView.setSurfaceTextureListener(surfaceTextureListener);
+        checkPermissions();
     }
 
-
-    private void useCamera() {
-        cameraHelper = new CameraHelper(this, textureView, PREVIEW_WIDTH, PREVIEW_HEIGHT);
-        cameraHelper.useCamera();
+    private boolean checkPermissions() {
+        boolean allGranted = true;
+        allGranted &= ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && checkSelfPermission(
+                Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{
+                    Manifest.permission.READ_EXTERNAL_STORAGE,
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE,
+                    Manifest.permission.CAMERA
+            }, 1);
+        }
+        return allGranted;
     }
 
     TextureView.SurfaceTextureListener surfaceTextureListener = new TextureView.SurfaceTextureListener() {
@@ -59,4 +74,16 @@ public class MainActivity extends AppCompatActivity {
 
         }
     };
+
+    private void useCamera() {
+        cameraHelper = new CameraHelper(this, textureView, PREVIEW_WIDTH, PREVIEW_HEIGHT);
+        cameraHelper.useCamera();
+    }
+
+
+    public void takePhoto(View view) {
+        if (null != cameraHelper) {
+            cameraHelper.takePhoto();
+        }
+    }
 }

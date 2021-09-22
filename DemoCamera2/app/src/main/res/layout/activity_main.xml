@@ -11,4 +11,13 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
+    <Button
+
+        android:id="@+id/main_bnt_take_photo"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="20dp"
+        android:onClick="takePhoto"
+        android:text="拍照"
+        app:layout_constraintBottom_toBottomOf="parent" />
 </androidx.constraintlayout.widget.ConstraintLayout>

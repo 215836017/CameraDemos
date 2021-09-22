@@ -2,6 +2,7 @@ package com.cakes.democamera2;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.graphics.ImageFormat;
 import android.graphics.Point;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
@@ -11,6 +12,9 @@ import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.params.StreamConfigurationMap;
+import android.media.Image;
+import android.media.ImageReader;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.text.TextUtils;
@@ -22,6 +26,10 @@ import androidx.annotation.NonNull;
 
 import com.cakes.democamera2.utils.LogUtil;
 
+import java.io.FileOutputStream;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -46,6 +54,9 @@ public class CameraHelper {
     private Handler cameraHandler;
 
     private CameraDevice currCameraDevice;
+    private Size supportedSize;
+
+    private CameraCaptureSession cameraCaptureSession;
 
     public CameraHelper(Context context, TextureView textureView, int previewWidth, int previewHeight) {
         this.context = context;
@@ -148,15 +159,20 @@ public class CameraHelper {
         }
     };
 
+    private ImageReader imageReader;
+
     private void createCameraPreviewSession() {
         // 获取合适的尺寸
-        Size supportedSize = getSupportedSize();
+        supportedSize = getSupportedSize();
         LogUtil.d(TAG, "createCameraPreviewSession() -- supportedSize: width = " + supportedSize.getWidth()
                 + ", height = " + supportedSize.getHeight());
 
         SurfaceTexture surfaceTexture = textureView.getSurfaceTexture();
         surfaceTexture.setDefaultBufferSize(supportedSize.getWidth(), supportedSize.getHeight());
         Surface surface = new Surface(surfaceTexture);
+
+        imageReader = ImageReader.newInstance(supportedSize.getWidth(), supportedSize.getHeight(), ImageFormat.JPEG, 2);
+        imageReader.setOnImageAvailableListener(onImageAvailableListener, cameraHandler);
 
         try {
             // 创建请求体
@@ -166,14 +182,17 @@ public class CameraHelper {
             captureRequest.addTarget(surface);  // 添加用户预览的Surface
 
             // 使用CameraDevice创建会话通道，然后通过回调返回创建会话的结果
-            currCameraDevice.createCaptureSession(Arrays.asList(surface), new CameraCaptureSession.StateCallback() {
+            currCameraDevice.createCaptureSession(Arrays.asList(surface, imageReader.getSurface()), new CameraCaptureSession.StateCallback() {
                 @Override
                 public void onConfigured(@NonNull CameraCaptureSession session) {
                     LogUtil.d(TAG, "currCameraDevice.createCaptureSession -- onConfigured");
                     if (null == currCameraDevice) {
                         // the camera is already closed
+                        LogUtil.d(TAG, "onConfigured() -- currCameraDevice is null");
                         return;
                     }
+
+                    cameraCaptureSession = session;
 
                     // 使用会话通道把配置好的请求体发送出去
                     try {
@@ -182,7 +201,6 @@ public class CameraHelper {
                     } catch (CameraAccessException e) {
                         e.printStackTrace();
                     }
-
                 }
 
                 @Override
@@ -190,6 +208,74 @@ public class CameraHelper {
 
                 }
             }, cameraHandler);
+        } catch (CameraAccessException e) {
+            e.printStackTrace();
+        }
+    }
+
+
+    ImageReader.OnImageAvailableListener onImageAvailableListener = new ImageReader.OnImageAvailableListener() {
+
+        private Image imagePhoto;
+        private ByteBuffer buffer;
+        private byte[] bytes;
+
+        private FileWriter fileWriter;
+        private FileOutputStream fos;
+
+        @Override
+        public void onImageAvailable(ImageReader reader) {
+            imagePhoto = reader.acquireNextImage();
+
+            buffer = imagePhoto.getPlanes()[0].getBuffer();
+            bytes = new byte[buffer.remaining()];
+            buffer.get(bytes);
+
+            imagePhoto.close();
+            reader.close();
+
+            savePhoto(bytes);
+        }
+
+        private void savePhoto(byte[] data) {
+
+            if (null == fos) {
+                try {
+                    fos = new FileOutputStream(Environment.getExternalStorageDirectory() + "/camera2_photo.hpg", true);
+
+                    fos.write(data);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }finally {
+                    if(null != fos){
+                        try {
+                            fos.close();
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                        fos = null;
+                    }
+                }
+            }
+        }
+    };
+
+    /**
+     * 拍照
+     */
+    public void takePhoto() {
+        try {
+            CaptureRequest.Builder captureRequest = currCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
+            captureRequest.addTarget(imageReader.getSurface());
+
+            if (null != cameraCaptureSession) {
+                cameraCaptureSession.capture(captureRequest.build(), new CameraCaptureSession.CaptureCallback() {
+                    @Override
+                    public void onCaptureStarted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, long timestamp, long frameNumber) {
+                        super.onCaptureStarted(session, request, timestamp, frameNumber);
+                    }
+                }, cameraHandler);
+            }
         } catch (CameraAccessException e) {
             e.printStackTrace();
         }
