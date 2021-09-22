@@ -1,6 +1,7 @@
 package com.cakes.democamera2;
 
 import android.annotation.SuppressLint;
+import android.app.Activity;
 import android.content.Context;
 import android.graphics.ImageFormat;
 import android.graphics.Point;
@@ -11,6 +12,7 @@ import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CaptureRequest;
+import android.hardware.camera2.TotalCaptureResult;
 import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.Image;
 import android.media.ImageReader;
@@ -19,6 +21,7 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.text.TextUtils;
 import android.util.Size;
+import android.util.SparseIntArray;
 import android.view.Surface;
 import android.view.TextureView;
 
@@ -40,7 +43,7 @@ public class CameraHelper {
 
     private final String TAG = "CameraHelper";
 
-    private Context context;
+    private Activity context;
     private TextureView textureView;
     private Point previewSize;
 
@@ -58,7 +61,7 @@ public class CameraHelper {
 
     private CameraCaptureSession cameraCaptureSession;
 
-    public CameraHelper(Context context, TextureView textureView, int previewWidth, int previewHeight) {
+    public CameraHelper(Activity context, TextureView textureView, int previewWidth, int previewHeight) {
         this.context = context;
         this.textureView = textureView;
         previewSize = new Point(previewWidth, previewHeight);
@@ -171,6 +174,7 @@ public class CameraHelper {
         surfaceTexture.setDefaultBufferSize(supportedSize.getWidth(), supportedSize.getHeight());
         Surface surface = new Surface(surfaceTexture);
 
+        // 用于拍照
         imageReader = ImageReader.newInstance(supportedSize.getWidth(), supportedSize.getHeight(), ImageFormat.JPEG, 2);
         imageReader.setOnImageAvailableListener(onImageAvailableListener, cameraHandler);
 
@@ -193,7 +197,6 @@ public class CameraHelper {
                     }
 
                     cameraCaptureSession = session;
-
                     // 使用会话通道把配置好的请求体发送出去
                     try {
                         session.setRepeatingRequest(captureRequest.build(), new CameraCaptureSession.CaptureCallback() {
@@ -241,13 +244,13 @@ public class CameraHelper {
 
             if (null == fos) {
                 try {
-                    fos = new FileOutputStream(Environment.getExternalStorageDirectory() + "/camera2_photo.hpg", true);
+                    fos = new FileOutputStream(Environment.getExternalStorageDirectory() + "/camera2_photo" + System.currentTimeMillis() + ".jpg", true);
 
                     fos.write(data);
                 } catch (IOException e) {
                     e.printStackTrace();
-                }finally {
-                    if(null != fos){
+                } finally {
+                    if (null != fos) {
                         try {
                             fos.close();
                         } catch (IOException e) {
@@ -260,6 +263,16 @@ public class CameraHelper {
         }
     };
 
+    //Camera2拍照也是通过ImageReader来实现的, 首先先做些准备工作，设置拍照参数，如方向、尺寸等
+    private static final SparseIntArray ORIENTATION = new SparseIntArray();
+
+    static {
+        ORIENTATION.append(Surface.ROTATION_0, 90);
+        ORIENTATION.append(Surface.ROTATION_90, 0);
+        ORIENTATION.append(Surface.ROTATION_180, 270);
+        ORIENTATION.append(Surface.ROTATION_270, 180);
+    }
+
     /**
      * 拍照
      */
@@ -268,11 +281,23 @@ public class CameraHelper {
             CaptureRequest.Builder captureRequest = currCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
             captureRequest.addTarget(imageReader.getSurface());
 
+            int cameraDisplayOrientation = CameraUtil.getCameraDisplayOrientation(context, currCamCharacteristics);
+            int rotation = context.getWindowManager().getDefaultDisplay().getRotation();
+            captureRequest.set(CaptureRequest.JPEG_ORIENTATION, ORIENTATION.get(rotation));
+//            captureRequest.set(CaptureRequest.JPEG_ORIENTATION, ORIENTATION.get(cameraDisplayOrientation));
+
             if (null != cameraCaptureSession) {
                 cameraCaptureSession.capture(captureRequest.build(), new CameraCaptureSession.CaptureCallback() {
                     @Override
                     public void onCaptureStarted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, long timestamp, long frameNumber) {
                         super.onCaptureStarted(session, request, timestamp, frameNumber);
+                        LogUtil.d(TAG, "onCaptureStarted() -- 1111111");
+                    }
+
+                    @Override
+                    public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
+                        super.onCaptureCompleted(session, request, result);
+                        LogUtil.d(TAG, "onCaptureCompleted() -- 1111111");
                     }
                 }, cameraHandler);
             }
